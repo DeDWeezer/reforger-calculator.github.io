@@ -1,0 +1,1079 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reforger Mortar Calculator</title>
+<meta name="description" content="Arma Reforger mortar calculator for the M252 and 2B14, built from the in-game firing tables with a fitted trajectory model for height differences.">
+<style>
+:root {
+  --bg: #f2f1ec;
+  --surface: #ffffff;
+  --surface-2: #f6f5f0;
+  --border: #dad7cd;
+  --border-strong: #c3bfb2;
+  --text: #1b1e1c;
+  --muted: #5f6661;
+  --accent: #8f5c00;
+  --accent-strong: #6f4700;
+  --accent-soft: #f5e8cc;
+  --on-accent: #ffffff;
+  --ok: #2b7537;
+  --ok-soft: #e1f0e3;
+  --bad: #ad3727;
+  --bad-soft: #f7e2dd;
+  --gun: #2f6fb3;
+  --tgt: #c0392b;
+  --shadow: 0 1px 2px rgba(20, 20, 10, .06), 0 4px 16px rgba(20, 20, 10, .05);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d100f;
+    --surface: #151917;
+    --surface-2: #1b201d;
+    --border: #29302c;
+    --border-strong: #3a433e;
+    --text: #e5eae7;
+    --muted: #949e98;
+    --accent: #e3ac45;
+    --accent-strong: #f0c46f;
+    --accent-soft: #2c2414;
+    --on-accent: #1a1405;
+    --ok: #7cc983;
+    --ok-soft: #16271a;
+    --bad: #ee8270;
+    --bad-soft: #2e1915;
+    --gun: #6ea8e8;
+    --tgt: #ee8270;
+    --shadow: none;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d100f;
+  --surface: #151917;
+  --surface-2: #1b201d;
+  --border: #29302c;
+  --border-strong: #3a433e;
+  --text: #e5eae7;
+  --muted: #949e98;
+  --accent: #e3ac45;
+  --accent-strong: #f0c46f;
+  --accent-soft: #2c2414;
+  --on-accent: #1a1405;
+  --ok: #7cc983;
+  --ok-soft: #16271a;
+  --bad: #ee8270;
+  --bad-soft: #2e1915;
+  --gun: #6ea8e8;
+  --tgt: #ee8270;
+  --shadow: none;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.num, input, .tile-val, .charges td { font-variant-numeric: tabular-nums; }
+.mono { font-family: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace; }
+
+.app { max-width: 1100px; margin: 0 auto; padding: 20px 16px 48px; }
+
+.top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+.top h1 { margin: 0; font-size: 24px; letter-spacing: -.01em; }
+.top .sub { margin: 2px 0 0; color: var(--muted); font-size: 14px; }
+
+.layout {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "weapon" "pos" "result" "adjust" "notes";
+}
+.area-weapon { grid-area: weapon; }
+.area-pos { grid-area: pos; }
+.area-result { grid-area: result; }
+.area-adjust { grid-area: adjust; }
+.area-notes { grid-area: notes; }
+@media (min-width: 900px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+    grid-template-areas: "weapon result" "pos result" "adjust result" "notes notes";
+    align-items: start;
+  }
+  .area-result { position: sticky; top: 16px; }
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: var(--shadow);
+  min-width: 0;
+}
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.card-title { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.card > .card-title { margin-bottom: 12px; }
+
+.field + .field { margin-top: 14px; }
+.label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.hint { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
+
+/* Segmented controls */
+.seg {
+  display: flex; gap: 3px; padding: 3px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.seg button {
+  flex: 1 1 0; min-width: 0;
+  appearance: none; border: 0; border-radius: 7px;
+  background: transparent; color: var(--text);
+  font: inherit; font-weight: 600; font-size: 14px;
+  padding: 8px 6px; cursor: pointer;
+  line-height: 1.2;
+}
+.seg button:hover { background: var(--border); }
+.seg button[aria-checked="true"] { background: var(--accent); color: var(--on-accent); }
+.seg button small { display: block; font-weight: 500; font-size: 12px; opacity: .8; margin-top: 2px; }
+.seg-sm button { font-size: 13px; padding: 6px 10px; }
+.seg-xs { padding: 2px; }
+.seg-xs button { font-size: 13px; padding: 4px 8px; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Inputs */
+.inp { display: block; }
+.inp > span { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+input[type="text"] {
+  width: 100%;
+  font: 600 17px/1.2 ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 9px 10px;
+}
+input[type="text"]::placeholder { color: var(--muted); opacity: .55; font-weight: 500; }
+input[aria-invalid="true"] { border-color: var(--bad); background: var(--bad-soft); }
+.inp + .inp { margin-top: 10px; }
+
+.pos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+fieldset.pos { margin: 0; padding: 12px; border: 1px solid var(--border); border-radius: 10px; min-width: 0; }
+fieldset.pos legend { padding: 0 6px; font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 6px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.dot-gun { background: var(--gun); }
+.dot-tgt { background: var(--tgt); }
+.interp { margin: 8px 0 0; font-size: 12.5px; color: var(--muted); min-height: 1.45em; }
+.interp.err { color: var(--bad); }
+
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.row2 + .row2 { margin-top: 12px; }
+.with-unit { display: flex; gap: 6px; align-items: stretch; }
+.with-unit input { flex: 1; min-width: 0; }
+.with-unit .seg { flex: none; }
+.unit { align-self: center; color: var(--muted); font-size: 14px; }
+
+/* Result */
+.area-result { border-color: var(--border-strong); }
+.tag { font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent-strong); }
+.tag:empty { display: none; }
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.tile {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 10px 9px;
+  min-width: 0;
+}
+.tile-label { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.tile-label b {
+  display: inline-grid; place-items: center;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--accent); color: var(--on-accent); font-size: 11px; letter-spacing: 0;
+}
+.tile-val {
+  font-family: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace;
+  font-weight: 700;
+  font-size: clamp(26px, 7.2vw, 44px);
+  line-height: 1.1;
+  margin-top: 6px;
+  white-space: nowrap;
+}
+.tile-val small { font-size: 13px; font-weight: 600; color: var(--muted); margin-left: 4px; font-family: system-ui, sans-serif; }
+.tile-sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; min-height: 1.45em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile.main { border-color: var(--accent); background: var(--accent-soft); }
+
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 12px 0 0; }
+.facts div { min-width: 0; }
+.facts dt { font-size: 12px; color: var(--muted); }
+.facts dd { margin: 0; font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums; }
+.explain { margin: 12px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); font-size: 14px; }
+.explain:empty { display: none; }
+
+.empty {
+  padding: 22px 14px; text-align: center; color: var(--muted);
+  border: 1px dashed var(--border-strong); border-radius: 12px;
+}
+.empty.bad { color: var(--bad); border-color: var(--bad); background: var(--bad-soft); }
+.empty strong { display: block; color: inherit; font-size: 16px; margin-bottom: 4px; }
+
+.mini-title { margin: 18px 0 8px; font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+table.charges { width: 100%; border-collapse: collapse; font-size: 14px; }
+.charges th { text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); padding: 0 8px 6px; }
+.charges td { padding: 8px; border-top: 1px solid var(--border); }
+.charges td:nth-child(-n+3), .charges th { white-space: nowrap; }
+.charges td:last-child { width: 100%; }
+.charges td.n { font-family: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace; font-weight: 600; }
+.charges tr.ok { cursor: pointer; }
+.charges tr.ok:hover td { background: var(--surface-2); }
+.charges tr.sel td { background: var(--accent-soft); }
+.charges tr.sel td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+.charges tr.no td { color: var(--muted); }
+.badge { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 7px; border-radius: 99px; white-space: nowrap; }
+.badge.rec { background: var(--ok-soft); color: var(--ok); }
+.badge.pick { background: var(--accent-soft); color: var(--accent-strong); }
+.small-muted { font-size: 12.5px; color: var(--muted); }
+
+/* Adjust */
+.adj-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 10px; align-items: center; }
+.adj-row + .adj-row { margin-top: 10px; }
+.adj-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; align-items: center; }
+.btn {
+  appearance: none; border: 1px solid var(--accent); border-radius: 8px;
+  background: var(--accent); color: var(--on-accent);
+  font: inherit; font-weight: 700; font-size: 14px; padding: 8px 14px; cursor: pointer;
+}
+.btn:hover { filter: brightness(1.08); }
+.ghost {
+  appearance: none; background: transparent; color: var(--text);
+  border: 1px solid var(--border-strong); border-radius: 8px;
+  font: inherit; font-size: 14px; font-weight: 600; padding: 7px 12px; cursor: pointer;
+}
+.ghost:hover { background: var(--surface-2); }
+.adj-status { font-size: 13.5px; font-weight: 600; }
+.adj-status.on { color: var(--accent-strong); }
+
+/* Notes */
+.notes { font-size: 14px; color: var(--muted); }
+.notes h2 { color: var(--muted); }
+.notes ul { margin: 0; padding-left: 18px; }
+.notes li + li { margin-top: 6px; }
+.notes strong { color: var(--text); }
+.notes a { color: var(--accent-strong); }
+
+[hidden] { display: none !important; }
+
+@media (max-width: 420px) {
+  .card { padding: 14px; }
+  .tiles { gap: 6px; }
+  .tile { padding: 8px 8px 7px; }
+  .tile-label { font-size: 11px; gap: 4px; }
+  .charges td, .charges th { padding-left: 5px; padding-right: 5px; }
+  .facts dd { font-size: 15px; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div>
+      <h1>Mortar Calculator</h1>
+      <p class="sub">Arma Reforger · M252 and 2B14 · from the in-game firing tables</p>
+    </div>
+    <button id="themeBtn" class="ghost" type="button" aria-label="Switch light or dark theme">Theme</button>
+  </header>
+
+  <main class="layout">
+    <!-- Weapon -->
+    <section class="card area-weapon" aria-labelledby="hWeapon">
+      <h2 id="hWeapon" class="card-title">Weapon</h2>
+      <div class="field">
+        <span class="label" id="lblWeapon">Mortar</span>
+        <div class="seg" id="weaponSeg" role="radiogroup" aria-labelledby="lblWeapon"></div>
+      </div>
+      <div class="field">
+        <span class="label" id="lblShell">Shell</span>
+        <div class="seg" id="shellSeg" role="radiogroup" aria-labelledby="lblShell"></div>
+        <p class="hint" id="shellHint"></p>
+      </div>
+    </section>
+
+    <!-- Positions -->
+    <section class="card area-pos" aria-labelledby="hPos">
+      <div class="card-head">
+        <h2 id="hPos" class="card-title">Positions</h2>
+        <div class="seg seg-sm" id="modeSeg" role="radiogroup" aria-label="How to enter the target">
+          <button type="button" role="radio" data-v="grid">Map grid</button>
+          <button type="button" role="radio" data-v="range">Range &amp; bearing</button>
+        </div>
+      </div>
+
+      <div id="gridInputs">
+        <div class="pos-grid">
+          <fieldset class="pos">
+            <legend><span class="dot dot-gun" aria-hidden="true"></span>Mortar</legend>
+            <label class="inp"><span>Easting (X)</span><input type="text" data-key="mx" inputmode="numeric" autocomplete="off" placeholder="0472"></label>
+            <label class="inp"><span>Northing (Y)</span><input type="text" data-key="my" inputmode="numeric" autocomplete="off" placeholder="0634"></label>
+            <label class="inp"><span>Altitude (m)</span><input type="text" data-key="malt" inputmode="decimal" autocomplete="off" placeholder="0"></label>
+            <p class="interp" id="mInterp"></p>
+          </fieldset>
+          <fieldset class="pos">
+            <legend><span class="dot dot-tgt" aria-hidden="true"></span>Target</legend>
+            <label class="inp"><span>Easting (X)</span><input type="text" data-key="tx" inputmode="numeric" autocomplete="off" placeholder="0581"></label>
+            <label class="inp"><span>Northing (Y)</span><input type="text" data-key="ty" inputmode="numeric" autocomplete="off" placeholder="0712"></label>
+            <label class="inp"><span>Altitude (m)</span><input type="text" data-key="talt" inputmode="decimal" autocomplete="off" placeholder="0"></label>
+            <p class="interp" id="tInterp"></p>
+          </fieldset>
+        </div>
+        <p class="hint">Grid digits per axis: 3 = 100 m square (<span class="mono">047</span>), 4 = 10 m (<span class="mono">0472</span>), 5 = 1 m. You can paste a full grid like <span class="mono">0472 0634</span> into Easting.</p>
+      </div>
+
+      <div id="rangeInputs" hidden>
+        <div class="row2">
+          <label class="inp"><span>Distance (m)</span><input type="text" data-key="dist" inputmode="decimal" autocomplete="off" placeholder="1250"></label>
+          <div class="inp">
+            <span id="lblBrg">Bearing to target</span>
+            <div class="with-unit">
+              <input type="text" data-key="brg" inputmode="decimal" autocomplete="off" placeholder="0" aria-labelledby="lblBrg">
+              <div class="seg seg-xs" id="brgUnitSeg" role="radiogroup" aria-label="Bearing unit">
+                <button type="button" role="radio" data-v="deg">deg</button>
+                <button type="button" role="radio" data-v="mil">mil</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="row2">
+          <label class="inp"><span>Mortar altitude (m)</span><input type="text" data-key="malt" inputmode="decimal" autocomplete="off" placeholder="0"></label>
+          <label class="inp"><span>Target altitude (m)</span><input type="text" data-key="talt" inputmode="decimal" autocomplete="off" placeholder="0"></label>
+        </div>
+        <p class="hint" id="brgHint">Measure distance and bearing with the map ruler and compass.</p>
+      </div>
+    </section>
+
+    <!-- Result -->
+    <section class="card area-result" aria-labelledby="hRes">
+      <div class="card-head">
+        <h2 id="hRes" class="card-title">Firing solution</h2>
+        <span class="tag" id="resTag"></span>
+      </div>
+
+      <div id="resMsg" class="empty" role="status"></div>
+
+      <div id="resBody" aria-live="polite" hidden>
+        <div class="tiles">
+          <div class="tile">
+            <div class="tile-label"><b>1</b>Azimuth</div>
+            <div class="tile-val"><span id="oAz">—</span><small>mil</small></div>
+            <div class="tile-sub" id="oAzSub"></div>
+          </div>
+          <div class="tile main">
+            <div class="tile-label"><b>2</b>Elevation</div>
+            <div class="tile-val"><span id="oEl">—</span><small>mil</small></div>
+            <div class="tile-sub" id="oElSub"></div>
+          </div>
+          <div class="tile">
+            <div class="tile-label"><b>3</b>Charge</div>
+            <div class="tile-val"><span id="oCh">—</span><small id="oChUnit"></small></div>
+            <div class="tile-sub" id="oChSub"></div>
+          </div>
+        </div>
+        <dl class="facts">
+          <div><dt>Flight time</dt><dd id="oTof">—</dd></div>
+          <div><dt>Range</dt><dd id="oRange">—</dd></div>
+          <div><dt>Target height</dt><dd id="oHeight">—</dd></div>
+        </dl>
+        <p class="explain" id="oExplain"></p>
+      </div>
+
+      <div id="chargesWrap" hidden>
+        <h3 class="mini-title">Every charge for this target</h3>
+        <table class="charges">
+          <thead><tr><th scope="col">Charge</th><th scope="col">Elevation</th><th scope="col">Flight</th><th scope="col"></th></tr></thead>
+          <tbody id="chBody"></tbody>
+        </table>
+        <p class="hint">Click a charge to fire with it instead. The recommended one is the lowest charge with range to spare: shortest flight and least sensitive to altitude errors.</p>
+      </div>
+    </section>
+
+    <!-- Adjust fire -->
+    <section class="card area-adjust" aria-labelledby="hAdj">
+      <div class="card-head">
+        <h2 id="hAdj" class="card-title">Adjust fire</h2>
+        <button type="button" class="ghost" id="adjReset">Reset</button>
+      </div>
+      <p class="hint" style="margin-top:0">Where should the next round land compared with the last one? Left and right are as seen from the mortar looking at the target.</p>
+      <div class="adj-row" style="margin-top:12px">
+        <div class="seg seg-sm" id="adjRangeSeg" role="radiogroup" aria-label="Range correction direction">
+          <button type="button" role="radio" data-v="add">Add (further)</button>
+          <button type="button" role="radio" data-v="drop">Drop (closer)</button>
+        </div>
+        <div class="with-unit"><input type="text" id="adjRange" inputmode="numeric" autocomplete="off" placeholder="0" aria-label="Range correction in metres"><span class="unit">m</span></div>
+      </div>
+      <div class="adj-row">
+        <div class="seg seg-sm" id="adjLatSeg" role="radiogroup" aria-label="Left or right correction direction">
+          <button type="button" role="radio" data-v="left">Left</button>
+          <button type="button" role="radio" data-v="right">Right</button>
+        </div>
+        <div class="with-unit"><input type="text" id="adjLat" inputmode="numeric" autocomplete="off" placeholder="0" aria-label="Left or right correction in metres"><span class="unit">m</span></div>
+      </div>
+      <div class="adj-actions">
+        <button type="button" class="btn" id="adjApply">Apply correction</button>
+        <span class="adj-status" id="adjStatus"></span>
+      </div>
+    </section>
+
+    <!-- Notes -->
+    <section class="card area-notes notes" aria-labelledby="hNotes">
+      <h2 id="hNotes" class="card-title">How it works</h2>
+      <ul>
+        <li><strong>Firing tables:</strong> elevations and flight times are the game's own ballistic tables for every shell and charge (vanilla, current with game 1.8). On level ground, every table row comes out exactly as the game lists it.</li>
+        <li><strong>Height difference:</strong> when the target is higher or lower than the mortar, the calculator flies a simulated shell with a drag model fitted to those tables (it reproduces every row within about 3 m). This is more accurate than the "dElev" shortcut many calculators use, which can be off by 5 or more mils at short range.</li>
+        <li><strong>Altitude matters most at long range on a given charge.</strong> Read heights from the map contours as carefully as you can.</li>
+        <li><strong>Mils:</strong> the M252 sight uses 6400 mils per circle, the 2B14 uses 6000. Azimuth is shown in the right system for the mortar you pick.</li>
+        <li>Shells scatter a little on every shot, so use <strong>Adjust fire</strong> to walk rounds onto the target. If a game update changes ballistics, compare a few values with the in-game Ballistic Table.</li>
+      </ul>
+    </section>
+  </main>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+/* ------------------------------------------------------------------
+   Firing-table data. rows: [range m, elevation mil, flight time s]
+   k / v0: drag constant and muzzle velocity fitted to those rows.
+   ------------------------------------------------------------------ */
+const SHELL_DATA = {
+  M821: { k: 1.1456e-04, charges: {
+      0: { v0: 65.720, rows: [[50,1540,13.2],[100,1479,13.2],[150,1416,13.0],[200,1350,12.8],[250,1279,12.6],[300,1201,12.3],[350,1106,11.7],[400,955,10.7]] },
+      1: { v0: 100.760, rows: [[100,1547,20.0],[200,1492,19.9],[300,1437,19.7],[400,1378,19.5],[500,1317,19.2],[600,1249,18.8],[700,1174,18.3],[800,1085,17.5],[900,954,16.1]] },
+      2: { v0: 137.468, rows: [[200,1538,26.6],[300,1507,26.5],[400,1475,26.4],[500,1443,26.3],[600,1410,26.2],[700,1376,26.0],[800,1341,25.8],[900,1305,25.5],[1000,1266,25.2],[1100,1225,24.9],[1200,1180,24.4],[1300,1132,23.9],[1400,1076,23.2],[1500,1009,22.3],[1600,912,20.9]] },
+      3: { v0: 167.606, rows: [[300,1534,31.7],[400,1511,31.6],[500,1489,31.6],[600,1466,31.5],[700,1442,31.4],[800,1419,31.3],[900,1395,31.1],[1000,1370,31.0],[1100,1344,30.8],[1200,1318,30.6],[1300,1291,30.3],[1400,1263,30.1],[1500,1233,29.7],[1600,1202,29.4],[1700,1169,29.0],[1800,1133,28.5],[1900,1094,28.0],[2000,1051,27.3],[2100,999,26.5],[2200,931,25.3],[2300,801,22.7]] },
+      4: { v0: 196.400, rows: [[400,1531,36.3],[500,1514,36.2],[600,1496,36.2],[700,1478,36.1],[800,1460,36.0],[900,1442,35.9],[1000,1424,35.8],[1100,1405,35.7],[1200,1385,35.6],[1300,1366,35.4],[1400,1346,35.3],[1500,1326,35.1],[1600,1305,34.9],[1700,1283,34.6],[1800,1261,34.4],[1900,1238,34.1],[2000,1214,33.8],[2100,1188,33.5],[2200,1162,33.1],[2300,1134,32.7],[2400,1104,32.2],[2500,1070,31.7],[2600,1034,31.0],[2700,993,30.3],[2800,942,29.2],[2900,870,27.7]] }
+  }},
+  M819: { k: 1.8647e-04, charges: {
+      1: { v0: 90.872, rows: [[200,1463,17.7],[250,1427,17.6],[300,1391,17.5],[350,1352,17.3],[400,1314,17.2],[450,1271,16.9],[500,1227,16.7],[550,1178,16.4],[600,1124,16.0],[650,1060,15.4],[700,982,14.7],[750,822,13.0]] },
+      2: { v0: 130.914, rows: [[200,1528,24.8],[300,1491,24.7],[400,1453,24.6],[500,1414,24.4],[600,1374,24.2],[700,1333,24.0],[800,1289,23.7],[900,1242,23.3],[1000,1191,22.9],[1100,1133,22.3],[1200,1067,21.6],[1300,980,20.5],[1400,818,18.0]] },
+      3: { v0: 161.588, rows: [[300,1522,29.6],[400,1495,29.6],[500,1468,29.5],[600,1440,29.3],[700,1412,29.2],[800,1383,29.0],[900,1354,28.9],[1000,1323,28.6],[1100,1291,28.4],[1200,1257,28.1],[1300,1221,27.7],[1400,1183,27.3],[1500,1142,26.8],[1600,1096,26.2],[1700,1044,25.5],[1800,980,24.5],[1900,892,23.0]] },
+      4: { v0: 189.190, rows: [[400,1517,33.6],[500,1495,33.5],[600,1474,33.5],[700,1452,33.4],[800,1429,33.2],[900,1407,33.1],[1000,1383,33.0],[1100,1360,32.8],[1200,1335,32.6],[1300,1310,32.4],[1400,1284,32.1],[1500,1257,31.9],[1600,1228,31.5],[1700,1199,31.2],[1800,1166,30.8],[1900,1132,30.3],[2000,1096,29.8],[2100,1055,29.1],[2200,1008,28.4],[2300,952,27.4],[2400,871,25.8]] }
+  }},
+  M853A1: { k: 3.5494e-04, charges: {
+      1: { v0: 96.008, rows: [[200,1463,18.1],[250,1428,18.0],[300,1391,17.9],[350,1352,17.7],[400,1312,17.5],[450,1269,17.3],[500,1224,17.0],[550,1175,16.7],[600,1120,16.3],[650,1055,15.7],[700,974,15.0],[750,823,13.3]] },
+      2: { v0: 149.587, rows: [[200,1529,26.2],[300,1493,26.1],[400,1457,26.0],[500,1419,25.8],[600,1379,25.6],[700,1338,25.4],[800,1295,25.1],[900,1249,24.7],[1000,1199,24.3],[1100,1144,23.7],[1200,1081,23.0],[1300,1005,22.0],[1400,900,20.5]] },
+      3: { v0: 190.334, rows: [[300,1521,31.1],[400,1494,31.1],[500,1466,31.0],[600,1438,30.8],[700,1409,30.7],[800,1380,30.5],[900,1349,30.3],[1000,1317,30.1],[1100,1284,29.8],[1200,1249,29.4],[1300,1212,29.1],[1400,1172,28.6],[1500,1128,28.1],[1600,1081,27.4],[1700,1027,26.6],[1800,962,25.6],[1900,875,24.1]] },
+      4: { v0: 235.300, rows: [[400,1515,35.7],[500,1493,35.7],[600,1471,35.6],[700,1448,35.5],[800,1426,35.4],[900,1402,35.2],[1000,1378,35.0],[1100,1353,34.8],[1200,1328,34.6],[1300,1301,34.4],[1400,1274,34.1],[1500,1245,33.8],[1600,1215,33.4],[1700,1184,33.0],[1800,1151,32.6],[1900,1115,32.1],[2000,1076,31.5],[2100,1033,30.8],[2200,985,29.9],[2300,928,28.8],[2400,855,27.4]] }
+  }},
+  M879: { k: 1.0432e-04, charges: {
+      1: { v0: 103.310, rows: [[200,1498,20.4],[300,1445,20.3],[400,1391,20.1],[500,1333,19.8],[600,1271,19.4],[700,1204,19.0],[800,1124,18.3],[900,1023,17.3],[1000,812,14.7]] },
+      2: { v0: 136.620, rows: [[300,1507,26.5],[400,1476,26.4],[500,1444,26.3],[600,1411,26.2],[700,1377,26.0],[800,1342,25.8],[900,1305,25.5],[1000,1267,25.2],[1100,1226,24.9],[1200,1182,24.4],[1300,1133,23.9],[1400,1078,23.2],[1500,1011,22.4],[1600,916,20.9]] },
+      3: { v0: 165.865, rows: [[400,1511,31.6],[500,1489,31.5],[600,1466,31.5],[700,1442,31.4],[800,1419,31.2],[900,1395,31.1],[1000,1370,30.9],[1100,1345,30.7],[1200,1318,30.5],[1300,1291,30.3],[1400,1263,30.0],[1500,1233,29.7],[1600,1203,29.4],[1700,1169,29.0],[1800,1134,28.5],[1900,1095,28.0],[2000,1051,27.3],[2100,1000,26.5],[2200,933,25.3],[2300,803,22.7]] },
+      4: { v0: 191.674, rows: [[500,1512,35.9],[600,1494,35.8],[700,1476,35.7],[800,1458,35.7],[900,1439,35.6],[1000,1420,35.4],[1100,1402,35.3],[1200,1382,35.2],[1300,1362,35.0],[1400,1342,34.9],[1500,1321,34.7],[1600,1300,34.5],[1700,1277,34.2],[1800,1255,34.0],[1900,1231,33.7],[2000,1206,33.4],[2100,1180,33.0],[2200,1153,32.7],[2300,1123,32.2],[2400,1092,31.7],[2500,1058,31.1],[2600,1018,30.4],[2700,973,29.5],[2800,915,28.4],[2900,812,26.1]] }
+  }},
+  O832: { k: 1.9673e-04, charges: {
+      0: { v0: 75.739, rows: [[50,1455,15.0],[100,1411,15.0],[150,1365,14.9],[200,1318,14.8],[250,1268,14.6],[300,1217,14.4],[350,1159,14.1],[400,1095,13.7],[450,1023,13.2],[500,922,12.4]] },
+      1: { v0: 100.026, rows: [[100,1446,19.5],[200,1392,19.4],[300,1335,19.2],[400,1275,18.9],[500,1212,18.6],[600,1141,18.1],[700,1058,17.4],[800,952,16.4]] },
+      2: { v0: 131.483, rows: [[200,1432,24.8],[300,1397,24.7],[400,1362,24.6],[500,1325,24.4],[600,1288,24.2],[700,1248,24.0],[800,1207,23.7],[900,1162,23.3],[1000,1114,22.9],[1100,1060,22.3],[1200,997,21.5],[1300,914,20.4]] },
+      3: { v0: 158.059, rows: [[300,1423,28.9],[400,1397,28.9],[500,1370,28.8],[600,1343,28.6],[700,1315,28.5],[800,1286,28.3],[900,1257,28.1],[1000,1226,27.9],[1100,1193,27.6],[1200,1159,27.2],[1300,1123,26.8],[1400,1084,26.4],[1500,1040,25.8],[1600,991,25.1],[1700,932,24.2],[1800,851,22.8]] },
+      4: { v0: 185.838, rows: [[400,1418,32.9],[500,1398,32.9],[600,1376,32.8],[700,1355,32.7],[800,1333,32.6],[900,1311,32.4],[1000,1288,32.2],[1100,1264,32.1],[1200,1240,31.8],[1300,1215,31.6],[1400,1189,31.3],[1500,1161,31.0],[1600,1133,30.7],[1700,1102,30.3],[1800,1069,29.8],[1900,1034,29.3],[2000,995,28.7],[2100,950,27.9],[2200,896,26.9],[2300,820,25.3]] }
+  }},
+  D832: { k: 1.8529e-04, charges: {
+      0: { v0: 70.711, rows: [[50,1450,14.1],[100,1399,14.0],[150,1347,13.9],[200,1292,13.8],[250,1235,13.6],[300,1172,13.3],[350,1102,12.9],[400,1020,12.4],[450,898,11.4]] },
+      1: { v0: 94.610, rows: [[200,1381,18.4],[300,1319,18.2],[400,1252,17.9],[500,1179,17.5],[600,1097,16.9],[700,993,16.0],[800,805,13.9]] },
+      2: { v0: 123.578, rows: [[300,1387,23.5],[400,1348,23.3],[500,1308,23.3],[600,1266,22.9],[700,1222,22.7],[800,1175,22.3],[900,1123,21.8],[1000,1065,21.3],[1100,994,20.4],[1200,902,19.2]] },
+      3: { v0: 147.481, rows: [[400,1387,27.3],[500,1357,27.2],[600,1327,27.1],[700,1296,26.9],[800,1264,26.7],[900,1231,26.5],[1000,1196,26.2],[1100,1159,25.8],[1200,1119,25.4],[1300,1075,24.9],[1400,1026,24.3],[1500,969,23.5],[1600,896,22.3]] }
+  }},
+  S832: { k: 5.3194e-04, charges: {
+      1: { v0: 88.492, rows: [[100,1421,16.4],[150,1381,16.3],[200,1339,16.2],[250,1296,16.1],[300,1251,15.9],[350,1203,15.7],[400,1151,15.4],[450,1093,15.0],[500,1028,14.5],[550,945,13.8],[600,799,12.3]] },
+      2: { v0: 141.337, rows: [[200,1417,23.6],[300,1374,23.5],[400,1330,23.3],[500,1284,23.1],[600,1234,22.8],[700,1182,22.4],[800,1124,21.9],[900,1057,21.3],[1000,979,20.4],[1100,870,18.9]] },
+      3: { v0: 192.949, rows: [[300,1411,29.0],[400,1380,28.9],[500,1348,28.9],[600,1315,28.7],[700,1281,28.6],[800,1246,28.4],[900,1209,27.8],[1000,1170,27.4],[1100,1128,27.0],[1200,1082,26.5],[1300,1031,25.8],[1400,973,25.0],[1500,903,23.9],[1600,807,22.3]] },
+      4: { v0: 275.910, rows: [[400,1411,35.3],[500,1388,35.2],[600,1364,35.1],[700,1341,35.0],[800,1316,34.8],[900,1291,34.7],[1000,1265,34.4],[1100,1238,34.2],[1200,1210,33.9],[1300,1181,33.6],[1400,1150,33.2],[1500,1119,32.8],[1600,1085,32.4],[1700,1048,31.8],[1800,1009,31.2],[1900,965,30.4],[2000,917,29.6]] }
+  }}
+};
+
+const WEAPONS = {
+  M252: {
+    label: 'M252', sub: 'US · 81 mm', mils: 6400, chargeUnit: 'rings',
+    chargeName: n => n + (n === 1 ? ' ring' : ' rings'),
+    shells: [
+      { id: 'M821', short: 'HE', full: 'M821 HE' },
+      { id: 'M819', short: 'Smoke', full: 'M819 Smoke' },
+      { id: 'M853A1', short: 'Illum', full: 'M853A1 Illumination' },
+      { id: 'M879', short: 'Practice', full: 'M879 Practice' },
+    ],
+  },
+  '2B14': {
+    label: '2B14', sub: 'USSR · 82 mm', mils: 6000, chargeUnit: '',
+    chargeName: n => 'Charge ' + n,
+    shells: [
+      { id: 'O832', short: 'HE', full: 'O-832DU HE' },
+      { id: 'D832', short: 'Smoke', full: 'D-832DU Smoke' },
+      { id: 'S832', short: 'Illum', full: 'S-832S Illumination' },
+    ],
+  },
+};
+
+/* ------------------------------------------------------------------
+   Ballistics: point mass with quadratic drag, a = -g - k|v|v (RK4).
+   Returns where the shell crosses height yT on the way down.
+   ------------------------------------------------------------------ */
+const G = 9.81, DT = 0.01;
+
+function fly(v0, k, el, yT) {
+  let x = 0, y = 0, vx = v0 * Math.cos(el), vy = v0 * Math.sin(el), t = 0;
+  const h = DT;
+  for (let i = 0; i < 30000; i++) {
+    let s = Math.sqrt(vx * vx + vy * vy);
+    const ax1 = -k * s * vx, ay1 = -G - k * s * vy;
+    let ux = vx + 0.5 * h * ax1, uy = vy + 0.5 * h * ay1;
+    s = Math.sqrt(ux * ux + uy * uy);
+    const ax2 = -k * s * ux, ay2 = -G - k * s * uy;
+    ux = vx + 0.5 * h * ax2; uy = vy + 0.5 * h * ay2;
+    s = Math.sqrt(ux * ux + uy * uy);
+    const ax3 = -k * s * ux, ay3 = -G - k * s * uy;
+    ux = vx + h * ax3; uy = vy + h * ay3;
+    s = Math.sqrt(ux * ux + uy * uy);
+    const ax4 = -k * s * ux, ay4 = -G - k * s * uy;
+    const nx = x + h * (vx + h / 6 * (ax1 + ax2 + ax3));
+    const ny = y + h * (vy + h / 6 * (ay1 + ay2 + ay3));
+    const nvx = vx + h / 6 * (ax1 + 2 * ax2 + 2 * ax3 + ax4);
+    const nvy = vy + h / 6 * (ay1 + 2 * ay2 + 2 * ay3 + ay4);
+    if (nvy < 0 && ny <= yT) {
+      if (y > yT) {
+        const f = (y - yT) / (y - ny);
+        return { x: x + f * (nx - x), t: t + f * h };
+      }
+      return null; // apex is below the target height
+    }
+    x = nx; y = ny; vx = nvx; vy = nvy; t += h;
+  }
+  return null;
+}
+
+const MILS_OF = {};
+for (const w of Object.values(WEAPONS)) for (const s of w.shells) MILS_OF[s.id] = w.mils;
+
+/* Per-charge model: the fitted physics plus a small correction so the
+   result matches the game's table exactly at every listed row. */
+const models = new Map();
+function getModel(shellId, ch) {
+  const key = shellId + ':' + ch;
+  if (models.has(key)) return models.get(key);
+  const sd = SHELL_DATA[shellId], cd = sd.charges[ch];
+  const rows = cd.rows;
+  const toRad = 2 * Math.PI / MILS_OF[shellId];
+  const m = {
+    ch: Number(ch), k: sd.k, v0: cd.v0, toRad, rows,
+    minR: rows[0][0], maxR: rows[rows.length - 1][0],
+    eLo: Math.min(...rows.map(r => r[1])), eHi: Math.max(...rows.map(r => r[1])),
+    res: [],
+  };
+  const shot = e => fly(m.v0, m.k, e * toRad, 0);
+  rows.forEach((row, i) => {
+    const [R, E, T] = row;
+    const a = rows[Math.max(i - 1, 0)], b = rows[Math.min(i + 1, rows.length - 1)];
+    const slope = (b[1] - a[1]) / (b[0] - a[0]); // mil per metre (negative)
+    let e0 = E, f0 = shot(e0);
+    let e1 = e0 + (R - f0.x) * slope, f1 = shot(e1);
+    for (let it = 0; it < 6 && Math.abs(f1.x - R) > 0.01 && f1.x !== f0.x; it++) {
+      const e2 = e1 + (R - f1.x) * (e1 - e0) / (f1.x - f0.x);
+      e0 = e1; f0 = f1; e1 = e2; f1 = shot(e1);
+    }
+    m.res.push({ e: e1, dE: E - e1, dT: T - f1.t });
+  });
+  m.res.sort((p, q) => p.e - q.e);
+  models.set(key, m);
+  return m;
+}
+
+function interpRes(res, e, field) {
+  if (e <= res[0].e) return res[0][field];
+  const last = res[res.length - 1];
+  if (e >= last.e) return last[field];
+  for (let i = 1; i < res.length; i++) {
+    if (e <= res[i].e) {
+      const p = res[i - 1], q = res[i];
+      return p[field] + (e - p.e) / (q.e - p.e) * (q[field] - p[field]);
+    }
+  }
+  return last[field];
+}
+
+/* High-angle solution for horizontal range R and height dH (target minus mortar). */
+function solve(m, R, dH) {
+  const MARGIN = 15;
+  const top = m.eHi + MARGIN, bottom = m.eLo - MARGIN;
+  const at = e => fly(m.v0, m.k, e * m.toRad, dH);
+  let ePrev = top, fPrev = at(top);
+  if (!fPrev) return { status: 'high' };
+  if (fPrev.x > R) return { status: 'close' };
+  const N = 24, step = (top - bottom) / N;
+  for (let i = 1; i <= N; i++) {
+    const e = top - step * i, f = at(e);
+    if (!f) return { status: dH > 0 ? 'high' : 'far' };
+    if (f.x >= R) {
+      let lo = e, hi = ePrev;
+      for (let j = 0; j < 18; j++) {
+        const mid = (lo + hi) / 2, fm = at(mid);
+        if (fm && fm.x >= R) lo = mid; else hi = mid;
+      }
+      const eSol = (lo + hi) / 2, fs = at(eSol);
+      const elev = eSol + interpRes(m.res, eSol, 'dE');
+      const tof = fs.t + interpRes(m.res, eSol, 'dT');
+      if (elev > m.eHi + 0.5) return { status: 'close' };
+      if (elev < m.eLo - 0.5) return { status: 'far' };
+      return { status: 'ok', elev, tof };
+    }
+    ePrev = e; fPrev = f;
+  }
+  return { status: 'far' };
+}
+
+/* ------------------------------------------------------------------
+   State + storage
+   ------------------------------------------------------------------ */
+const STORE_KEY = 'reforger-mortar-calc.v1';
+const defaults = {
+  weapon: 'M252', shell: { M252: 'M821', '2B14': 'O832' }, mode: 'grid',
+  mx: '', my: '', malt: '', tx: '', ty: '', talt: '',
+  dist: '', brg: '', brgUnit: 'deg',
+  adjRangeDir: 'add', adjLatDir: 'left', adjE: 0, adjN: 0, adjBase: null,
+  chargePick: null,
+};
+let state = { ...defaults, shell: { ...defaults.shell } };
+try {
+  const saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
+  if (saved && typeof saved === 'object') {
+    state = { ...state, ...saved, shell: { ...defaults.shell, ...(saved.shell || {}) } };
+  }
+} catch (e) { /* storage unavailable */ }
+if (!WEAPONS[state.weapon]) state.weapon = 'M252';
+
+let saveTimer = 0;
+function save() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
+  }, 250);
+}
+
+/* ------------------------------------------------------------------
+   Parsing helpers
+   ------------------------------------------------------------------ */
+function parseGrid(str) {
+  const s = String(str || '').trim();
+  if (!s) return { empty: true };
+  if (!/^\d+$/.test(s)) return { error: 'Digits only' };
+  const n = s.length, v = parseInt(s, 10);
+  if (n === 3) return { m: v * 100 + 50, prec: 100 };
+  if (n === 4) return { m: v * 10 + 5, prec: 10 };
+  if (n === 5) return { m: v + 0.5, prec: 1 };
+  return { error: 'Use 3, 4 or 5 digits' };
+}
+function parseNum(str) {
+  const s = String(str || '').trim().replace(',', '.');
+  if (!s) return { empty: true };
+  const v = Number(s);
+  return Number.isFinite(v) ? { v } : { error: true };
+}
+const fmtInt = v => Math.round(v).toLocaleString('en-US');
+const signed = v => (v > 0 ? '+' : v < 0 ? '−' : '±') + Math.abs(v).toLocaleString('en-US');
+
+/* ------------------------------------------------------------------
+   DOM
+   ------------------------------------------------------------------ */
+const $ = id => document.getElementById(id);
+const inputs = [...document.querySelectorAll('input[data-key]')];
+
+function setSeg(el, value) {
+  for (const b of el.querySelectorAll('button')) {
+    const on = b.dataset.v === value;
+    b.setAttribute('aria-checked', on ? 'true' : 'false');
+    b.tabIndex = on ? 0 : -1;
+  }
+}
+function bindSeg(el, onPick) {
+  el.addEventListener('click', ev => {
+    const b = ev.target.closest('button');
+    if (b && el.contains(b)) onPick(b.dataset.v);
+  });
+  el.addEventListener('keydown', ev => {
+    if (!['ArrowLeft', 'ArrowRight'].includes(ev.key)) return;
+    const btns = [...el.querySelectorAll('button')];
+    const i = btns.findIndex(b => b.getAttribute('aria-checked') === 'true');
+    const j = (i + (ev.key === 'ArrowRight' ? 1 : -1) + btns.length) % btns.length;
+    onPick(btns[j].dataset.v);
+    btns[j].focus();
+    ev.preventDefault();
+  });
+}
+
+function buildWeaponSeg() {
+  const el = $('weaponSeg');
+  el.innerHTML = '';
+  for (const [id, w] of Object.entries(WEAPONS)) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.setAttribute('role', 'radio'); b.dataset.v = id;
+    b.innerHTML = `${w.label}<small>${w.sub}</small>`;
+    el.appendChild(b);
+  }
+}
+function buildShellSeg() {
+  const el = $('shellSeg');
+  el.innerHTML = '';
+  for (const s of WEAPONS[state.weapon].shells) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.setAttribute('role', 'radio'); b.dataset.v = s.id;
+    b.textContent = s.short;
+    el.appendChild(b);
+  }
+}
+
+function syncInputs(except) {
+  for (const inp of inputs) {
+    if (inp === except) continue;
+    const v = state[inp.dataset.key] ?? '';
+    if (inp.value !== v) inp.value = v;
+  }
+}
+
+/* Geometry: horizontal range, bearing (deg) and height from the inputs. */
+function geometry() {
+  const malt = parseNum(state.malt), talt = parseNum(state.talt);
+  const altErr = malt.error || talt.error;
+  const dH = (talt.v || 0) - (malt.v || 0);
+  let dx, dy, msgs = { m: '', t: '' }, bad = {};
+  if (state.mode === 'grid') {
+    const g = { mx: parseGrid(state.mx), my: parseGrid(state.my), tx: parseGrid(state.tx), ty: parseGrid(state.ty) };
+    for (const k of Object.keys(g)) if (g[k].error) bad[k] = true;
+    const desc = (x, y) => {
+      if (x.error || y.error) return { text: x.error || y.error, err: true };
+      if (x.empty || y.empty) return { text: '' };
+      return { text: `${fmtInt(x.m - x.prec / 2)} m E, ${fmtInt(y.m - y.prec / 2)} m N (${Math.max(x.prec, y.prec)} m square)` };
+    };
+    msgs.m = desc(g.mx, g.my); msgs.t = desc(g.tx, g.ty);
+    if (Object.values(g).some(p => p.empty || p.error)) return { incomplete: true, msgs, bad, altErr };
+    dx = g.tx.m - g.mx.m; dy = g.ty.m - g.my.m;
+  } else {
+    const d = parseNum(state.dist), b = parseNum(state.brg);
+    if (d.error) bad.dist = true;
+    if (b.error) bad.brg = true;
+    if (d.empty || d.error || b.empty || b.error || d.v <= 0) return { incomplete: true, msgs, bad, altErr };
+    const deg = state.brgUnit === 'mil' ? b.v * 360 / WEAPONS[state.weapon].mils : b.v;
+    const rad = deg * Math.PI / 180;
+    dx = d.v * Math.sin(rad); dy = d.v * Math.cos(rad);
+  }
+  if (malt.error) bad.malt = true;
+  if (talt.error) bad.talt = true;
+  const base = { dx, dy };
+  dx += state.adjE; dy += state.adjN;
+  const R = Math.hypot(dx, dy);
+  let brg = Math.atan2(dx, dy) * 180 / Math.PI;
+  if (brg < 0) brg += 360;
+  return { R, brg, dH, dx, dy, base, msgs, bad, altErr };
+}
+
+/* ------------------------------------------------------------------
+   Render
+   ------------------------------------------------------------------ */
+function render() {
+  const w = WEAPONS[state.weapon];
+  if (!w.shells.some(s => s.id === state.shell[state.weapon])) state.shell[state.weapon] = w.shells[0].id;
+  const shellId = state.shell[state.weapon];
+  const shell = w.shells.find(s => s.id === shellId);
+
+  setSeg($('weaponSeg'), state.weapon);
+  setSeg($('shellSeg'), shellId);
+  setSeg($('modeSeg'), state.mode);
+  setSeg($('brgUnitSeg'), state.brgUnit);
+  setSeg($('adjRangeSeg'), state.adjRangeDir);
+  setSeg($('adjLatSeg'), state.adjLatDir);
+  $('gridInputs').hidden = state.mode !== 'grid';
+  $('rangeInputs').hidden = state.mode !== 'range';
+
+  const charges = Object.keys(SHELL_DATA[shellId].charges).map(Number);
+  const allRows = charges.flatMap(c => SHELL_DATA[shellId].charges[c].rows);
+  const minAll = Math.min(...allRows.map(r => r[0])), maxAll = Math.max(...allRows.map(r => r[0]));
+  $('shellHint').textContent =
+    `${shell.full}: ${w.chargeName(charges[0]).toLowerCase()} to ${w.chargeName(charges[charges.length - 1]).toLowerCase()}, ` +
+    `${fmtInt(minAll)}–${fmtInt(maxAll)} m on level ground. Sight reads ${w.mils} mils per circle.`;
+  $('brgHint').textContent = `Measure distance and bearing with the map ruler and compass. Bearing in degrees, or in ${w.mils}-mil units.`;
+
+  const geo = geometry();
+
+  // Field validation + grid read-back
+  for (const inp of inputs) inp.setAttribute('aria-invalid', geo.bad[inp.dataset.key] ? 'true' : 'false');
+  for (const [id, msg] of [['mInterp', geo.msgs.m], ['tInterp', geo.msgs.t]]) {
+    const el = $(id);
+    el.textContent = msg ? msg.text : '';
+    el.classList.toggle('err', !!(msg && msg.err));
+  }
+
+  // Adjust-fire status
+  const adjOn = Math.abs(state.adjE) > 0.01 || Math.abs(state.adjN) > 0.01;
+  $('adjReset').disabled = !adjOn;
+  if (adjOn && geo.base) {
+    const b = Math.atan2(geo.base.dx, geo.base.dy);
+    const along = state.adjE * Math.sin(b) + state.adjN * Math.cos(b);
+    const across = state.adjE * Math.cos(b) - state.adjN * Math.sin(b);
+    const parts = [];
+    if (Math.round(along)) parts.push(`${fmtInt(Math.abs(along))} m ${along > 0 ? 'add' : 'drop'}`);
+    if (Math.round(across)) parts.push(`${fmtInt(Math.abs(across))} m ${across > 0 ? 'right' : 'left'}`);
+    $('adjStatus').textContent = 'Aim moved ' + (parts.join(', ') || 'less than 1 m') + ' from target';
+    $('adjStatus').className = 'adj-status on';
+  } else {
+    $('adjStatus').textContent = adjOn ? 'Correction stored' : 'No correction applied';
+    $('adjStatus').className = 'adj-status';
+  }
+
+  const msg = $('resMsg'), body = $('resBody'), wrap = $('chargesWrap');
+  const showMsg = (title, text, isBad) => {
+    msg.hidden = false; body.hidden = true;
+    msg.className = 'empty' + (isBad ? ' bad' : '');
+    msg.innerHTML = `<strong>${title}</strong>${text}`;
+    $('resTag').textContent = '';
+  };
+
+  if (geo.incomplete) {
+    wrap.hidden = true;
+    showMsg('Waiting for positions',
+      state.mode === 'grid' ? 'Enter the mortar and target grids to get a firing solution.' : 'Enter distance and bearing to get a firing solution.');
+    save();
+    return;
+  }
+  if (geo.altErr) {
+    wrap.hidden = true;
+    showMsg('Check the altitudes', 'Altitude must be a number in metres.', true);
+    save();
+    return;
+  }
+  if (geo.R < 1) {
+    wrap.hidden = true;
+    showMsg('Target is on the mortar', 'Mortar and target are at the same spot.', true);
+    save();
+    return;
+  }
+
+  // Solve every charge
+  const sols = charges.map(c => {
+    const m = getModel(shellId, c);
+    return { ch: c, m, ...solve(m, geo.R, geo.dH) };
+  });
+  const ok = sols.filter(s => s.status === 'ok');
+  const rec = ok.find(s => geo.R <= 0.9 * s.m.maxR) || ok[0] || null;
+  let pick = rec;
+  if (state.chargePick != null) {
+    const p = ok.find(s => s.ch === state.chargePick);
+    if (p) pick = p;
+  }
+
+  // Charges table
+  wrap.hidden = false;
+  const tb = $('chBody');
+  tb.innerHTML = '';
+  for (const s of sols) {
+    const tr = document.createElement('tr');
+    const isOk = s.status === 'ok';
+    tr.className = isOk ? 'ok' + (pick && s.ch === pick.ch ? ' sel' : '') : 'no';
+    let status;
+    if (isOk) {
+      if (rec && s.ch === rec.ch) status = '<span class="badge rec">Recommended</span>';
+      else if (pick && s.ch === pick.ch) status = '<span class="badge pick">Your pick</span>';
+      else status = `<span class="small-muted">${fmtInt(s.m.minR)}–${fmtInt(s.m.maxR)} m</span>`;
+    } else if (s.status === 'close') status = `<span class="small-muted">Too close (min ${fmtInt(s.m.minR)} m)</span>`;
+    else if (s.status === 'high') status = '<span class="small-muted">Target too high</span>';
+    else status = `<span class="small-muted">Too far (max ${fmtInt(s.m.maxR)} m)</span>`;
+    tr.innerHTML =
+      `<td>${w.chargeName(s.ch)}</td>` +
+      `<td class="n">${isOk ? Math.round(s.elev) : '—'}</td>` +
+      `<td class="n">${isOk ? s.tof.toFixed(1) + ' s' : '—'}</td>` +
+      `<td>${status}</td>`;
+    if (isOk) {
+      tr.tabIndex = 0;
+      tr.setAttribute('aria-label', `Use ${w.chargeName(s.ch)}`);
+      const choose = () => { state.chargePick = (rec && s.ch === rec.ch) ? null : s.ch; render(); };
+      tr.addEventListener('click', choose);
+      tr.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); choose(); } });
+    }
+    tb.appendChild(tr);
+  }
+
+  if (!pick) {
+    let why;
+    if (sols.every(s => s.status === 'close')) why = `The target is ${fmtInt(geo.R)} m away. ${shell.full} needs at least ${fmtInt(Math.min(...sols.map(s => s.m.minR)))} m.`;
+    else if (sols.some(s => s.status === 'high')) why = `The target is ${fmtInt(geo.dH)} m above the mortar at ${fmtInt(geo.R)} m. No charge can reach that height and distance.`;
+    else why = `The target is ${fmtInt(geo.R)} m away. ${shell.full} reaches up to ${fmtInt(Math.max(...sols.map(s => s.m.maxR)))} m on level ground.`;
+    showMsg('Out of range', why, true);
+    save();
+    return;
+  }
+
+  // Main readout
+  msg.hidden = true; body.hidden = false;
+  const azMil = Math.round(geo.brg / 360 * w.mils) % w.mils;
+  $('oAz').textContent = String(azMil);
+  $('oAzSub').textContent = `${geo.brg.toFixed(1)}°`;
+  $('oEl').textContent = String(Math.round(pick.elev));
+  $('oElSub').textContent = shell.full;
+  $('oCh').textContent = String(pick.ch);
+  $('oChUnit').textContent = w.chargeUnit;
+  $('oChSub').textContent = pick === rec ? 'Best pick' : 'Your pick';
+  $('resTag').textContent = `${w.label} · ${shell.short}`;
+  $('oTof').textContent = pick.tof.toFixed(1) + ' s';
+  $('oRange').textContent = fmtInt(geo.R) + ' m';
+  const dHr = Math.round(geo.dH);
+  $('oHeight').textContent = dHr === 0 ? 'Level' : `${signed(dHr)} m`;
+
+  // Explain the height correction
+  let explain = '';
+  if (Math.abs(geo.dH) >= 0.5) {
+    const flat = solve(pick.m, geo.R, 0);
+    const where = geo.dH > 0 ? 'above' : 'below';
+    if (flat.status === 'ok') {
+      const d = Math.round(pick.elev) - Math.round(flat.elev);
+      explain = `Target is ${fmtInt(Math.abs(geo.dH))} m ${where} the mortar, so the elevation is ` +
+        (d === 0 ? 'unchanged (under 1 mil).' : `${signed(d)} mil compared with level ground (${Math.round(flat.elev)}).`);
+    } else {
+      explain = `Target is ${fmtInt(Math.abs(geo.dH))} m ${where} the mortar. This charge only reaches it because of the height difference.`;
+    }
+  } else {
+    explain = 'Target and mortar are at the same height: this is the straight firing-table value.';
+  }
+  $('oExplain').textContent = explain;
+  save();
+}
+
+/* ------------------------------------------------------------------
+   Events
+   ------------------------------------------------------------------ */
+const POSITION_KEYS = new Set(['mx', 'my', 'tx', 'ty', 'dist', 'brg']);
+let raf = 0;
+function scheduleRender() { cancelAnimationFrame(raf); raf = requestAnimationFrame(render); }
+
+function clearAdjust() { state.adjE = 0; state.adjN = 0; }
+
+// A full grid in an Easting box: "0472 0634" or "04720634" -> [x, y]
+function splitGrid(v) {
+  const s = v.trim();
+  const parts = s.split(/[\s,;/-]+/).filter(Boolean);
+  if (parts.length === 2 && parts.every(p => /^\d{3,5}$/.test(p))) return parts;
+  if (/^\d{6}$|^\d{8}$|^\d{10}$/.test(s)) return [s.slice(0, s.length / 2), s.slice(s.length / 2)];
+  return null;
+}
+
+function setValue(inp, v) {
+  const key = inp.dataset.key;
+  if (POSITION_KEYS.has(key) && state[key] !== v) { clearAdjust(); state.chargePick = null; }
+  state[key] = v;
+  if (inp.value !== v) inp.value = v;
+}
+
+for (const inp of inputs) {
+  const key = inp.dataset.key;
+  const isEasting = key === 'mx' || key === 'tx';
+  const yKey = key === 'mx' ? 'my' : 'ty';
+  const yInput = () => inp.closest('fieldset').querySelector(`input[data-key="${yKey}"]`);
+  const trySplit = () => {
+    const p = splitGrid(inp.value);
+    if (!p) return false;
+    setValue(inp, p[0]);
+    setValue(yInput(), p[1]);
+    return true;
+  };
+
+  inp.addEventListener('input', ev => {
+    let v = inp.value;
+    if (isEasting) {
+      const pasted = ev.inputType === 'insertFromPaste' || ev.inputType === 'insertFromDrop';
+      if (pasted && trySplit()) { syncInputs(); scheduleRender(); return; }
+      if (/^\d{3,5}[\s,]$/.test(v)) {
+        // Typing a space after the Easting jumps to Northing
+        v = v.slice(0, -1);
+        setTimeout(() => yInput().focus(), 0);
+      }
+    }
+    setValue(inp, v);
+    syncInputs(inp);
+    scheduleRender();
+  });
+  if (isEasting) {
+    inp.addEventListener('change', () => { if (trySplit()) { syncInputs(); scheduleRender(); } });
+  }
+}
+
+buildWeaponSeg();
+bindSeg($('weaponSeg'), v => {
+  if (v === state.weapon) return;
+  // Keep the bearing the same direction when it is typed in mils
+  if (state.mode === 'range' && state.brgUnit === 'mil') {
+    const b = parseNum(state.brg);
+    if (b.v != null) state.brg = String(Math.round(b.v * WEAPONS[v].mils / WEAPONS[state.weapon].mils));
+  }
+  state.weapon = v; state.chargePick = null;
+  buildShellSeg(); syncInputs(); render();
+});
+buildShellSeg();
+bindSeg($('shellSeg'), v => { state.shell[state.weapon] = v; state.chargePick = null; render(); });
+bindSeg($('modeSeg'), v => { if (v !== state.mode) { state.mode = v; clearAdjust(); state.chargePick = null; render(); } });
+bindSeg($('brgUnitSeg'), v => {
+  if (v === state.brgUnit) return;
+  const b = parseNum(state.brg), mils = WEAPONS[state.weapon].mils;
+  if (b.v != null) {
+    state.brg = v === 'mil' ? String(Math.round(b.v / 360 * mils)) : String(Math.round(b.v * 360 / mils * 10) / 10);
+  }
+  state.brgUnit = v; syncInputs(); render();
+});
+bindSeg($('adjRangeSeg'), v => { state.adjRangeDir = v; render(); });
+bindSeg($('adjLatSeg'), v => { state.adjLatDir = v; render(); });
+
+function applyAdjust() {
+  const geo = geometry();
+  const r = parseNum($('adjRange').value), l = parseNum($('adjLat').value);
+  $('adjRange').setAttribute('aria-invalid', r.error ? 'true' : 'false');
+  $('adjLat').setAttribute('aria-invalid', l.error ? 'true' : 'false');
+  if (r.error || l.error || geo.incomplete) return;
+  const along = (r.v || 0) * (state.adjRangeDir === 'add' ? 1 : -1);
+  const across = (l.v || 0) * (state.adjLatDir === 'right' ? 1 : -1);
+  if (!along && !across) return;
+  const b = Math.atan2(geo.dx, geo.dy); // current line of fire
+  state.adjE += along * Math.sin(b) + across * Math.cos(b);
+  state.adjN += along * Math.cos(b) - across * Math.sin(b);
+  $('adjRange').value = ''; $('adjLat').value = '';
+  render();
+}
+$('adjApply').addEventListener('click', applyAdjust);
+for (const id of ['adjRange', 'adjLat']) {
+  $(id).addEventListener('keydown', ev => { if (ev.key === 'Enter') applyAdjust(); });
+}
+$('adjReset').addEventListener('click', () => { clearAdjust(); render(); });
+
+// Theme toggle (follows the system until clicked)
+const THEME_KEY = 'reforger-mortar-calc.theme';
+try {
+  const t = localStorage.getItem(THEME_KEY);
+  if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+} catch (e) { /* ignore */ }
+$('themeBtn').addEventListener('click', () => {
+  const cur = document.documentElement.dataset.theme ||
+    (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  const next = cur === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem(THEME_KEY, next); } catch (e) { /* ignore */ }
+});
+
+syncInputs();
+render();
+
+// Exposed for testing in the console
+window.MortarCalc = { fly, solve, getModel, SHELL_DATA, WEAPONS };
+})();
+</script>
+</body>
+</html>
